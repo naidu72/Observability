@@ -1,3 +1,6 @@
+crds:
+  enabled: false
+
 # kube-prometheus-stack values for the pi-k8s homelab cluster
 # k3s-specific notes are called out inline — this is NOT a stock values.yaml
 
