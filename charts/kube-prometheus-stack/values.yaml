@@ -1,0 +1,189 @@
+# kube-prometheus-stack values for the pi-k8s homelab cluster
+# k3s-specific notes are called out inline — this is NOT a stock values.yaml
+
+## ---------------------------------------------------------------
+## k3s embeds kube-scheduler, kube-controller-manager, and kube-proxy
+## inside the single `k3s server` process (confirmed: PID running as
+## `/usr/local/bin/k3s server` on pi5-1). There are no separate pods/
+## services for these, so the chart's default ServiceMonitors for them
+## will sit in permanent failure. Disable them explicitly.
+## ---------------------------------------------------------------
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+## etcd IS scrapeable, but only after you expose it — see README.md
+## step "Enable etcd metrics on pi5-1" before this ServiceMonitor will
+## actually return data. pi5-1 is your sole control-plane/etcd node.
+kubeEtcd:
+  enabled: true
+  endpoints:
+    - 192.168.0.0 # TODO: replace with pi5-1's actual IP
+  service:
+    port: 2381
+    targetPort: 2381
+  serviceMonitor:
+    scheme: http
+    insecureSkipVerify: true
+
+## node-exporter runs on every node — good, this is how you get
+## per-node memory/CPU (the pi5-1 74% memory number you saw via
+## `kubectl top nodes`) into Grafana with history + alerting.
+nodeExporter:
+  enabled: true
+
+kubeStateMetrics:
+  enabled: true
+
+## ---------------------------------------------------------------
+## Prometheus
+## ---------------------------------------------------------------
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          # TODO: confirm this matches your actual StorageClass name —
+          # run `kubectl get storageclass` and adjust if different
+          storageClassName: nfs-client
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
+    # additionalScrapeConfigs could go here later if you add scrape
+    # targets kube-prometheus-stack doesn't auto-discover (e.g. Vault,
+    # AWX, cinextma) — leaving this out for now, first get core metrics
+    # flowing before adding app-level scraping.
+
+## ---------------------------------------------------------------
+## Alertmanager -> Discord
+## Webhook URL is pulled from Vault via ESO, matching your existing
+## kv/ -> vault-backend pattern. See README.md for the ExternalSecret.
+## ---------------------------------------------------------------
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+    ## Mount the ExternalSecret-created Secret into Alertmanager so the
+    ## webhook URL is never stored in this git repo.
+    secrets:
+      - discord-webhook
+    externalUrl: "https://alertmanager.naidu72.info"
+  config:
+    global: {}
+    route:
+      receiver: discord
+      group_by: ["alertname", "severity"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      routes:
+        - receiver: discord
+          continue: true
+    receivers:
+      - name: discord
+        discord_configs:
+          - webhook_url_file: /etc/alertmanager/secrets/discord-webhook/webhook_url
+
+## ---------------------------------------------------------------
+## Grafana — ingress via Traefik + cert-manager, same pattern as your
+## other *.naidu72.info services.
+## ---------------------------------------------------------------
+grafana:
+  enabled: true
+  defaultDashboardsEnabled: true
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-dns01 # TODO: match your actual ClusterIssuer name
+    hosts:
+      - grafana.naidu72.info
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - grafana.naidu72.info
+  ## Admin password pulled from Vault via ESO instead of the chart's
+  ## auto-generated random secret — see README.md.
+  admin:
+    existingSecret: grafana-admin-credentials
+    userKey: admin-user
+    passwordKey: admin-password
+
+## ---------------------------------------------------------------
+## Baseline alert rules — start conservative, tune thresholds after
+## a week of watching real data rather than guessing up front.
+## ---------------------------------------------------------------
+additionalPrometheusRulesMap:
+  homelab-rules:
+    groups:
+      - name: homelab.node.rules
+        rules:
+          - alert: HomelabNodeMemoryHigh
+            expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Node {{ $labels.instance }} memory usage above 85%"
+              description: "Sustained high memory pressure — pi5-1 running control-plane + etcd is the one to watch first."
+
+          - alert: HomelabNodeMemoryCritical
+            expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Node {{ $labels.instance }} memory usage above 95%"
+
+      - name: homelab.etcd.rules
+        rules:
+          - alert: HomelabEtcdInsufficientMembers
+            expr: count(up{job="kube-etcd"} == 1) < ((count(up{job="kube-etcd"}) + 1) / 2)
+            for: 3m
+            labels:
+              severity: critical
+            annotations:
+              summary: "etcd cluster has lost quorum"
+              description: "Directly relevant to your rock64/pi5-1 etcd quorum history — page immediately."
+
+          - alert: HomelabEtcdDown
+            expr: up{job="kube-etcd"} == 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "etcd on {{ $labels.instance }} is down"
+
+      - name: homelab.pod.rules
+        rules:
+          - alert: HomelabPodCrashLooping
+            expr: increase(kube_pod_container_status_restarts_total[15m]) > 3
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash looping"
+
+      - name: homelab.pvc.rules
+        rules:
+          - alert: HomelabPVCAlmostFull
+            expr: (kubelet_volume_stats_available_bytes / kubelet_volume_stats_capacity_bytes) * 100 < 10
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} has less than 10% free space"
