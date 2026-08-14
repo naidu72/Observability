@@ -99,26 +99,62 @@ alertmanager:
       requests:
         cpu: 50m
         memory: 64Mi
-    ## Mount the ExternalSecret-created Secret into Alertmanager so the
-    ## webhook URL is never stored in this git repo.
-    secrets:
-      - discord-webhook
     externalUrl: "https://alertmanager.naidu72.info"
+    ## v1alpha1 AlertmanagerConfig uses the legacy selector-based routing
+    ## model: matched AlertmanagerConfig objects are inserted as CHILD
+    ## routes under the base config's root route, and by default the
+    ## operator auto-injects a `namespace: <config's namespace>` matcher
+    ## on that child route. Since most of our alerts (node, etcd, pod)
+    ## carry a `namespace` label that ISN'T "monitoring", that default
+    ## matcher would silently swallow them. `type: None` disables the
+    ## auto-injection so the discord AlertmanagerConfig below actually
+    ## catches everything, not just monitoring-namespace alerts.
+    alertmanagerConfigMatcherStrategy:
+      type: None
+    ## Matches ANY AlertmanagerConfig object in the monitoring namespace
+    ## (the default kube-prometheus-stack behavior — explicit here for
+    ## clarity since we're relying on it).
+    alertmanagerConfigSelector: {}
+  ## Base/root config — deliberately minimal. This exists only to give
+  ## Alertmanager a valid root route + fallback receiver; the ACTUAL
+  ## discord routing lives in the AlertmanagerConfig CRD below, since
+  ## the operator's raw-config parser does NOT support webhook_url_file
+  ## for discord_configs (confirmed via operator logs: "failed to
+  ## initialize from secret: no discord webhook URL provided" — it
+  ## only accepts an inline webhook_url in this raw config path).
   config:
     global: {}
     route:
-      receiver: discord
+      receiver: "null"
       group_by: ["alertname", "severity"]
       group_wait: 30s
       group_interval: 5m
       repeat_interval: 4h
-      routes:
-        - receiver: discord
-          continue: true
     receivers:
-      - name: discord
-        discord_configs:
-          - webhook_url_file: /etc/alertmanager/secrets/discord-webhook/webhook_url
+      - name: "null"
+
+## AlertmanagerConfig CRD (v1alpha1) handles the real discord routing.
+## Pulls the webhook URL straight from the discord-webhook Secret via
+## secretKeyRef — no file mount, no operator config-parsing gap.
+extraManifests:
+  - apiVersion: monitoring.coreos.com/v1alpha1
+    kind: AlertmanagerConfig
+    metadata:
+      name: homelab-discord
+      namespace: monitoring
+    spec:
+      route:
+        receiver: discord
+        groupBy: ["alertname", "severity"]
+        groupWait: 30s
+        groupInterval: 5m
+        repeatInterval: 4h
+      receivers:
+        - name: discord
+          discordConfigs:
+            - apiURL:
+                name: discord-webhook
+                key: webhook_url
 
 ## ---------------------------------------------------------------
 ## Grafana — ingress via Cloudflare Tunnel, matching the pattern used
