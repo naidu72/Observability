@@ -18,7 +18,7 @@ spec:
       targetRevision: main
       ref: values
   destination:
-    server: https://kubernetes.default.svc
+    server: https://k8spi.naidu72.info
     namespace: monitoring
   syncPolicy:
     automated:
