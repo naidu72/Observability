@@ -21,7 +21,7 @@ kubeProxy:
 kubeEtcd:
   enabled: true
   endpoints:
-    - 192.168.0.0 # TODO: replace with pi5-1's actual IP
+    - 192.168.0.151 # TODO: replace with pi5-1's actual IP
   service:
     port: 2381
     targetPort: 2381
@@ -109,7 +109,7 @@ grafana:
     enabled: true
     ingressClassName: traefik
     annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-dns01 # TODO: match your actual ClusterIssuer name
+      cert-manager.io/cluster-issuer: letsencrypt-prod # TODO: match your actual ClusterIssuer name
     hosts:
       - grafana.naidu72.info
     tls:
