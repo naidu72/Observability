@@ -14,7 +14,7 @@ spec:
     directory:
       recurse: true
   destination:
-    server: https://kubernetes.default.svc
+    server: https://k8spi.naidu72.info
     namespace: argocd
   syncPolicy:
     automated:
