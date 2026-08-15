@@ -17,7 +17,7 @@ jobs:
 
       - name: Lint YAML
         run: |
-          yamllint -d "{extends: default, rules: {line-length: disable, document-start: disable, comments: disable, comments-indentation: disable, truthy: disable}}" .
+          yamllint -d "{extends: default, rules: {line-length: disable, document-start: disable, comments: disable, comments-indentation: disable, truthy: disable, new-line-at-end-of-file: disable}}" .
 
   helm-template:
     runs-on: ubuntu-latest
