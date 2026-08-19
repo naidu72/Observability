@@ -1,0 +1,26 @@
+# This Application lives on main (so root-app's recursive scan finds
+# it), but its SOURCE points at the tailscale branch — that's where
+# the actual tailscale-subnet-router manifests live, decoupled from
+# the main-tracked observability stack.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+name: tailscale-subnet-router
+namespace: argocd
+finalizers:
+- resources-finalizer.argocd.argoproj.io
+spec:
+project: tailscale
+source:
+repoURL: https://github.com/naidu72/Observability.git
+targetRevision: tailscale
+path: apps
+destination:
+server: https://kubernetes.default.svc
+namespace: homelab
+syncPolicy:
+automated:
+prune: true
+selfHeal: true
+syncOptions:
+- CreateNamespace=true: No such file or directory
