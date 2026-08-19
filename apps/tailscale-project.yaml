@@ -14,7 +14,7 @@ spec:
     - https://github.com/naidu72/Observability.git
   destinations:
     - namespace: homelab
-      server: https://kubernetes.default.svc
+      server: "*"
   clusterResourceWhitelist: []
   namespaceResourceWhitelist:
     - group: ""
