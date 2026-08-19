@@ -16,7 +16,7 @@ spec:
     targetRevision: tailscale
     path: apps
   destination:
-    server: https://kubernetes.default.svc
+    server: https://k8spi.naidu72.info
     namespace: homelab
   syncPolicy:
     automated:
