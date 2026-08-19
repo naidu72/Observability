@@ -1,0 +1,31 @@
+# AppProject: a policy boundary above Applications. Restricts which
+# repos/branches, which cluster+namespace destinations, and which
+# resource kinds anything assigned to this project is allowed to use.
+# This does NOT replace the Application's own destination.namespace —
+# it's an outer guardrail, not a namespace substitute.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: tailscale
+  namespace: argocd
+spec:
+  description: Tailscale subnet router — isolated on its own branch/project
+  sourceRepos:
+    - https://github.com/naidu72/Observability.git
+  destinations:
+    - namespace: homelab
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ServiceAccount
+    - group: ""
+      kind: Secret
+    - group: apps
+      kind: Deployment
+    - group: rbac.authorization.k8s.io
+      kind: Role
+    - group: rbac.authorization.k8s.io
+      kind: RoleBinding
+    - group: external-secrets.io
+      kind: ExternalSecret
