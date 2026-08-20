@@ -32,7 +32,7 @@ spec:
         app: ollama
     spec:
       nodeSelector:
-        kubernetes.io/hostname: pi5zero
+        kubernetes.io/hostname: pi5-0
       containers:
         - name: ollama
           image: ollama/ollama:latest
