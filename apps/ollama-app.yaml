@@ -1,0 +1,25 @@
+# apps/ollama-app.yaml  (put on `main`)
+# Lives on main (so root-app's recursive scan finds it), source points
+# at the "ollama" branch where the actual manifests live.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ollama
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: ollama
+  source:
+    repoURL: https://github.com/naidu72/Observability.git
+    targetRevision: ollama
+    path: apps
+  destination:
+    server: https://k8spi.naidu72.info
+    namespace: ollama
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,23 @@
+# apps/ollama-project.yaml  (put on `main`)
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: ollama
+  namespace: argocd
+spec:
+  description: Ollama local LLM serving — isolated on its own branch/project
+  sourceRepos:
+    - https://github.com/naidu72/Observability.git
+  destinations:
+    - namespace: ollama
+      server: "*"
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: PersistentVolumeClaim
+    - group: apps
+      kind: Deployment
+    - group: networking.k8s.io
+      kind: Ingress
