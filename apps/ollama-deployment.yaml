@@ -42,6 +42,8 @@ spec:
           env:
             - name: OLLAMA_HOST
               value: "0.0.0.0:11434"
+            - name: OLLAMA_ORIGINS
+              value: "*"   
           volumeMounts:
             - name: models
               mountPath: /root/.ollama
