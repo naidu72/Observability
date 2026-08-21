@@ -1,0 +1,23 @@
+# apps/ai-ui-project.yaml  (put on `main`)
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: ai-ui
+  namespace: argocd
+spec:
+  description: Static chat UI for Ollama — isolated on its own branch/project
+  sourceRepos:
+    - https://github.com/naidu72/Observability.git
+  destinations:
+    - namespace: ai-ui
+      server: "*"
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Service
+    - group: apps
+      kind: Deployment
+    - group: networking.k8s.io
+      kind: Ingress
