@@ -1,0 +1,393 @@
+# apps/ai-ui-deployment.yaml  (put on `ai-ui` branch)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-ui-html
+  namespace: ai-ui
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ollama@pi5-0 — pi-k8s homelab</title>
+    </head>
+    <body>
+    <div id="app"></div>
+    <style>
+      :root {
+        --bg: #0a0e0c;
+        --surface: #0f1512;
+        --border: #1c2622;
+        --text: #d7e4dc;
+        --dim: #5e7568;
+        --accent: #3ddc84;
+        --accent-dim: #235c3e;
+        --amber: #ffb454;
+        --error: #ff6b6b;
+        --mono: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace;
+      }
+
+      * { box-sizing: border-box; }
+
+      #app {
+        font-family: var(--mono);
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .window {
+        width: 100%;
+        max-width: 760px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 0 0 1px rgba(61,220,132,0.03), 0 20px 60px rgba(0,0,0,0.5);
+        display: flex;
+        flex-direction: column;
+        height: 640px;
+      }
+
+      .titlebar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        background: #0d1310;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+      }
+
+      .dot { width: 11px; height: 11px; border-radius: 50%; }
+      .dot.r { background: #ff5f56; }
+      .dot.y { background: #ffbd2e; }
+      .dot.g { background: #27c93f; }
+
+      .title-text {
+        margin-left: 6px;
+        font-size: 12.5px;
+        color: var(--dim);
+        letter-spacing: 0.02em;
+      }
+
+      .title-text b { color: var(--text); font-weight: 500; }
+
+      .statbar {
+        display: flex;
+        gap: 16px;
+        padding: 7px 14px;
+        background: #0c110e;
+        border-bottom: 1px solid var(--border);
+        font-size: 11px;
+        color: var(--dim);
+        flex-shrink: 0;
+        flex-wrap: wrap;
+      }
+
+      .statbar .stat b {
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      .statbar .stat.err b { color: var(--error); }
+
+      .log {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+        font-size: 13.5px;
+        line-height: 1.65;
+      }
+
+      .log::-webkit-scrollbar { width: 8px; }
+      .log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+      .log::-webkit-scrollbar-track { background: transparent; }
+
+      .line { margin-bottom: 14px; white-space: pre-wrap; word-wrap: break-word; }
+
+      .prompt-line { color: var(--amber); }
+      .prompt-line .arrow { color: var(--accent); margin-right: 8px; }
+
+      .resp-line { color: var(--text); padding-left: 18px; border-left: 2px solid var(--accent-dim); }
+
+      .sys-line { color: var(--dim); font-style: italic; font-size: 12.5px; }
+      .err-line { color: var(--error); padding-left: 18px; border-left: 2px solid var(--error); }
+
+      .cursor {
+        display: inline-block;
+        width: 7px;
+        height: 14px;
+        background: var(--accent);
+        margin-left: 2px;
+        vertical-align: middle;
+        animation: blink 1s step-start infinite;
+      }
+
+      @keyframes blink { 50% { opacity: 0; } }
+
+      .inputbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 14px;
+        border-top: 1px solid var(--border);
+        background: #0c110e;
+        flex-shrink: 0;
+      }
+
+      .inputbar .arrow { color: var(--accent); font-size: 14px; }
+
+      .inputbar input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 13.5px;
+        caret-color: var(--accent);
+      }
+
+      .inputbar input::placeholder { color: var(--dim); }
+
+      .inputbar input:disabled { opacity: 0.5; }
+
+      .hint {
+        font-size: 10.5px;
+        color: var(--dim);
+        padding: 0 14px 10px;
+        background: #0c110e;
+      }
+
+      .hint kbd {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        padding: 1px 5px;
+        font-size: 10px;
+        color: var(--dim);
+      }
+    </style>
+
+    <script>
+    (function() {
+      const OLLAMA_URL = 'https://ollama.naidu72.info/api/generate';
+      const MODEL = 'llama3.2:1b';
+      const NODE = 'pi5-0';
+
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <div class="window">
+          <div class="titlebar">
+            <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+            <span class="title-text">ollama@<b>${NODE}</b> — pi-k8s homelab</span>
+          </div>
+          <div class="statbar" id="statbar">
+            <span class="stat">model <b>${MODEL}</b></span>
+            <span class="stat">tok/s <b id="tps">—</b></span>
+            <span class="stat">latency <b id="latency">—</b></span>
+            <span class="stat">status <b id="status" style="color:var(--dim)">idle</b></span>
+          </div>
+          <div class="log" id="log">
+            <div class="line sys-line">connected to ollama.naidu72.info via cloudflare tunnel. type a prompt and hit enter.</div>
+          </div>
+          <div class="inputbar">
+            <span class="arrow">➜</span>
+            <input id="prompt-input" type="text" placeholder="ask llama3.2:1b something..." autocomplete="off" />
+          </div>
+          <div class="hint"><kbd>enter</kbd> send &nbsp; <kbd>ctrl+l</kbd> clear</div>
+        </div>
+      `;
+
+      const log = document.getElementById('log');
+      const input = document.getElementById('prompt-input');
+      const tpsEl = document.getElementById('tps');
+      const latEl = document.getElementById('latency');
+      const statusEl = document.getElementById('status');
+
+      function scrollBottom() { log.scrollTop = log.scrollHeight; }
+
+      function addLine(cls, text) {
+        const div = document.createElement('div');
+        div.className = 'line ' + cls;
+        div.textContent = text;
+        log.appendChild(div);
+        scrollBottom();
+        return div;
+      }
+
+      function setStatus(text, isError) {
+        statusEl.textContent = text;
+        statusEl.style.color = isError ? 'var(--error)' : 'var(--accent)';
+      }
+
+      let busy = false;
+
+      async function send(promptText) {
+        if (busy || !promptText.trim()) return;
+        busy = true;
+        input.disabled = true;
+        setStatus('generating…');
+        addLine('prompt-line', '➜ ' + promptText);
+
+        const respDiv = document.createElement('div');
+        respDiv.className = 'line resp-line';
+        const cursor = document.createElement('span');
+        cursor.className = 'cursor';
+        respDiv.appendChild(document.createTextNode(''));
+        respDiv.appendChild(cursor);
+        log.appendChild(respDiv);
+        scrollBottom();
+
+        const start = performance.now();
+        let fullText = '';
+
+        try {
+          const res = await fetch(OLLAMA_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: MODEL, prompt: promptText, stream: true })
+          });
+
+          if (!res.ok || !res.body) throw new Error('HTTP ' + res.status);
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              const obj = JSON.parse(line);
+              if (obj.response) {
+                fullText += obj.response;
+                respDiv.textContent = fullText;
+                respDiv.appendChild(cursor);
+                scrollBottom();
+              }
+              if (obj.done) {
+                const secs = obj.eval_duration ? obj.eval_duration / 1e9 : null;
+                const tps = secs && obj.eval_count ? (obj.eval_count / secs).toFixed(1) : '—';
+                tpsEl.textContent = tps;
+                latEl.textContent = ((performance.now() - start) / 1000).toFixed(1) + 's';
+              }
+            }
+          }
+          cursor.remove();
+          setStatus('idle');
+        } catch (err) {
+          cursor.remove();
+          const msg = err.message.includes('Failed to fetch')
+            ? 'blocked — likely CORS. Ollama needs OLLAMA_ORIGINS set to allow this origin.'
+            : err.message;
+          addLine('err-line', 'error: ' + msg);
+          setStatus('error', true);
+        } finally {
+          busy = false;
+          input.disabled = false;
+          input.focus();
+        }
+      }
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const val = input.value;
+          input.value = '';
+          send(val);
+        }
+        if (e.ctrlKey && e.key === 'l') {
+          e.preventDefault();
+          log.innerHTML = '';
+          addLine('sys-line', 'cleared.');
+        }
+      });
+
+      input.focus();
+    })();
+    </script>
+    </body>
+    </html>
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-ui
+  namespace: ai-ui
+  labels:
+    app: ai-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-ui
+  template:
+    metadata:
+      labels:
+        app: ai-ui
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: html
+              mountPath: /usr/share/nginx/html
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "200m"
+              memory: "64Mi"
+      volumes:
+        - name: html
+          configMap:
+            name: ai-ui-html
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-ui
+  namespace: ai-ui
+spec:
+  selector:
+    app: ai-ui
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-ui
+  namespace: ai-ui
+spec:
+  ingressClassName: cloudflare-tunnel
+  rules:
+    - host: ai.naidu72.info
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ai-ui
+                port:
+                  number: 80

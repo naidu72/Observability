@@ -1,0 +1,23 @@
+# apps/ai-ui-app.yaml  (put on `main`)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ai-ui
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: ai-ui
+  source:
+    repoURL: https://github.com/naidu72/Observability.git
+    targetRevision: ai-ui
+    path: apps
+  destination:
+    server: https://k8spi.naidu72.info
+    namespace: ai-ui
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
