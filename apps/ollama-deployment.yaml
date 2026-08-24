@@ -43,7 +43,9 @@ spec:
             - name: OLLAMA_HOST
               value: "0.0.0.0:11434"
             - name: OLLAMA_ORIGINS
-              value: "*"   
+              value: "*"  
+            - name: OLLAMA_KEEP_ALIVE     
+              value: "24h"                 
           volumeMounts:
             - name: models
               mountPath: /root/.ollama
