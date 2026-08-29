@@ -1,323 +1,290 @@
-# apps/ai-ui-deployment.yaml  (put on `ai-ui` branch)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ollama-ui
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: ai-ui-html
-  namespace: ai-ui
+  name: ollama-ui-html
+  namespace: ollama-ui
 data:
   index.html: |
     <!DOCTYPE html>
     <html lang="en">
     <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ollama@pi5-0 — pi-k8s homelab</title>
-    </head>
-    <body>
-    <div id="app"></div>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ollama @ pi-k8s</title>
     <style>
       :root {
-        --bg: #0a0e0c;
-        --surface: #0f1512;
-        --border: #1c2622;
-        --text: #d7e4dc;
-        --dim: #5e7568;
-        --accent: #3ddc84;
-        --accent-dim: #235c3e;
-        --amber: #ffb454;
-        --error: #ff6b6b;
-        --mono: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace;
+        --bg: #0d1117;
+        --panel: #12161c;
+        --border: #2a2f38;
+        --text: #c9d1d9;
+        --muted: #6e7681;
+        --green: #3fb950;
+        --amber: #d29922;
+        --red: #f85149;
+        --accent: #58a6ff;
       }
-
       * { box-sizing: border-box; }
-
-      #app {
-        font-family: var(--mono);
+      body {
+        margin: 0;
         background: var(--bg);
         color: var(--text);
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 24px;
-      }
-
-      .window {
-        width: 100%;
-        max-width: 760px;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        overflow: hidden;
-        box-shadow: 0 0 0 1px rgba(61,220,132,0.03), 0 20px 60px rgba(0,0,0,0.5);
+        font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+        font-size: 14px;
+        height: 100vh;
         display: flex;
         flex-direction: column;
-        height: 640px;
       }
-
       .titlebar {
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 10px 14px;
-        background: #0d1310;
+        padding: 10px 16px;
         border-bottom: 1px solid var(--border);
-        flex-shrink: 0;
+        background: var(--panel);
       }
-
       .dot { width: 11px; height: 11px; border-radius: 50%; }
-      .dot.r { background: #ff5f56; }
-      .dot.y { background: #ffbd2e; }
-      .dot.g { background: #27c93f; }
+      .dot.r { background: var(--red); }
+      .dot.a { background: var(--amber); }
+      .dot.g { background: var(--green); }
+      .titletext { margin-left: 8px; color: var(--muted); }
+      .titletext b { color: var(--text); }
 
-      .title-text {
-        margin-left: 6px;
-        font-size: 12.5px;
-        color: var(--dim);
-        letter-spacing: 0.02em;
-      }
-
-      .title-text b { color: var(--text); font-weight: 500; }
-
-      .statbar {
+      .statusbar {
         display: flex;
-        gap: 16px;
-        padding: 7px 14px;
-        background: #0c110e;
+        align-items: center;
+        gap: 24px;
+        padding: 10px 16px;
         border-bottom: 1px solid var(--border);
-        font-size: 11px;
-        color: var(--dim);
-        flex-shrink: 0;
-        flex-wrap: wrap;
+        background: var(--panel);
       }
-
-      .statbar .stat b {
-        color: var(--accent);
-        font-weight: 600;
+      .statusbar label { color: var(--muted); margin-right: 8px; }
+      select {
+        background: var(--bg);
+        color: var(--green);
+        border: 1px solid var(--border);
+        font-family: inherit;
+        font-size: 13px;
+        padding: 4px 8px;
+        border-radius: 4px;
       }
-
-      .statbar .stat.err b { color: var(--error); }
+      select:disabled { color: var(--muted); }
+      .stat { color: var(--muted); }
+      .stat b { color: var(--text); }
+      .status-value { font-weight: bold; }
+      .status-idle { color: var(--muted); }
+      .status-loading { color: var(--amber); }
+      .status-ready { color: var(--green); }
+      .status-error { color: var(--red); }
 
       .log {
         flex: 1;
         overflow-y: auto;
         padding: 16px;
-        font-size: 13.5px;
-        line-height: 1.65;
       }
-
-      .log::-webkit-scrollbar { width: 8px; }
-      .log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-      .log::-webkit-scrollbar-track { background: transparent; }
-
-      .line { margin-bottom: 14px; white-space: pre-wrap; word-wrap: break-word; }
-
-      .prompt-line { color: var(--amber); }
-      .prompt-line .arrow { color: var(--accent); margin-right: 8px; }
-
-      .resp-line { color: var(--text); padding-left: 18px; border-left: 2px solid var(--accent-dim); }
-
-      .sys-line { color: var(--dim); font-style: italic; font-size: 12.5px; }
-      .err-line { color: var(--error); padding-left: 18px; border-left: 2px solid var(--error); }
-
-      .cursor {
-        display: inline-block;
-        width: 7px;
-        height: 14px;
-        background: var(--accent);
-        margin-left: 2px;
-        vertical-align: middle;
-        animation: blink 1s step-start infinite;
-      }
-
-      @keyframes blink { 50% { opacity: 0; } }
+      .hint { color: var(--muted); font-style: italic; margin-bottom: 16px; }
+      .turn { margin-bottom: 18px; }
+      .prompt-line { color: var(--amber); margin-bottom: 4px; }
+      .prompt-line::before { content: "→ "; }
+      .response-line { color: var(--text); white-space: pre-wrap; padding-left: 4px; border-left: 2px solid var(--border); margin-left: 2px; padding-left: 10px; }
+      .error-line { color: var(--red); padding-left: 10px; border-left: 2px solid var(--red); margin-left: 2px; }
+      .meta-line { color: var(--muted); font-size: 12px; margin-top: 4px; }
 
       .inputbar {
         display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 12px 14px;
+        gap: 10px;
+        padding: 14px 16px;
         border-top: 1px solid var(--border);
-        background: #0c110e;
-        flex-shrink: 0;
+        background: var(--panel);
       }
-
-      .inputbar .arrow { color: var(--accent); font-size: 14px; }
-
-      .inputbar input {
+      input[type=text] {
         flex: 1;
-        background: transparent;
-        border: none;
-        outline: none;
+        background: var(--bg);
         color: var(--text);
-        font-family: var(--mono);
-        font-size: 13.5px;
-        caret-color: var(--accent);
-      }
-
-      .inputbar input::placeholder { color: var(--dim); }
-
-      .inputbar input:disabled { opacity: 0.5; }
-
-      .hint {
-        font-size: 10.5px;
-        color: var(--dim);
-        padding: 0 14px 10px;
-        background: #0c110e;
-      }
-
-      .hint kbd {
-        background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: 3px;
-        padding: 1px 5px;
-        font-size: 10px;
-        color: var(--dim);
+        font-family: inherit;
+        font-size: 14px;
+        padding: 10px 12px;
+        border-radius: 4px;
       }
+      input[type=text]:focus { outline: none; border-color: var(--accent); }
+      button {
+        background: var(--bg);
+        color: var(--green);
+        border: 1px solid var(--border);
+        font-family: inherit;
+        font-size: 13px;
+        padding: 0 18px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button:hover:not(:disabled) { border-color: var(--green); }
+      button:disabled { color: var(--muted); cursor: not-allowed; }
     </style>
+    </head>
+    <body>
+
+    <div class="titlebar">
+      <span class="dot r"></span><span class="dot a"></span><span class="dot g"></span>
+      <span class="titletext">ollama@<b id="node-label">pi5-0</b> &mdash; pi-k8s homelab</span>
+    </div>
+
+    <div class="statusbar">
+      <div>
+        <label for="model-select">model</label>
+        <select id="model-select" disabled>
+          <option>loading...</option>
+        </select>
+      </div>
+      <div class="stat">tok/s <b id="stat-toks">&mdash;</b></div>
+      <div class="stat">latency <b id="stat-latency">&mdash;</b></div>
+      <div class="stat">status <span class="status-value status-idle" id="stat-status">idle</span></div>
+    </div>
+
+    <div class="log" id="log">
+      <div class="hint" id="conn-hint">connecting to ollama...</div>
+    </div>
+
+    <div class="inputbar">
+      <input type="text" id="prompt-input" placeholder="type a prompt and hit enter" disabled>
+      <button id="send-btn" disabled>send</button>
+    </div>
 
     <script>
-    (function() {
-      const OLLAMA_URL = 'https://ollama.naidu72.info/api/generate';
-      const MODEL = 'llama3.2:1b';
-      const NODE = 'pi5-0';
+      const OLLAMA_BASE = window.location.hostname === 'localhost'
+        ? 'http://localhost:11434'
+        : 'https://ollama.naidu72.info';
 
-      const app = document.getElementById('app');
-      app.innerHTML = `
-        <div class="window">
-          <div class="titlebar">
-            <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-            <span class="title-text">ollama@<b>${NODE}</b> — pi-k8s homelab</span>
-          </div>
-          <div class="statbar" id="statbar">
-            <span class="stat">model <b>${MODEL}</b></span>
-            <span class="stat">tok/s <b id="tps">—</b></span>
-            <span class="stat">latency <b id="latency">—</b></span>
-            <span class="stat">status <b id="status" style="color:var(--dim)">idle</b></span>
-          </div>
-          <div class="log" id="log">
-            <div class="line sys-line">connected to ollama.naidu72.info via cloudflare tunnel. type a prompt and hit enter.</div>
-          </div>
-          <div class="inputbar">
-            <span class="arrow">➜</span>
-            <input id="prompt-input" type="text" placeholder="ask llama3.2:1b something..." autocomplete="off" />
-          </div>
-          <div class="hint"><kbd>enter</kbd> send &nbsp; <kbd>ctrl+l</kbd> clear</div>
-        </div>
-      `;
-
+      const modelSelect = document.getElementById('model-select');
+      const promptInput = document.getElementById('prompt-input');
+      const sendBtn = document.getElementById('send-btn');
       const log = document.getElementById('log');
-      const input = document.getElementById('prompt-input');
-      const tpsEl = document.getElementById('tps');
-      const latEl = document.getElementById('latency');
-      const statusEl = document.getElementById('status');
+      const connHint = document.getElementById('conn-hint');
+      const statStatus = document.getElementById('stat-status');
+      const statToks = document.getElementById('stat-toks');
+      const statLatency = document.getElementById('stat-latency');
 
-      function scrollBottom() { log.scrollTop = log.scrollHeight; }
-
-      function addLine(cls, text) {
-        const div = document.createElement('div');
-        div.className = 'line ' + cls;
-        div.textContent = text;
-        log.appendChild(div);
-        scrollBottom();
-        return div;
+      function setStatus(state, label) {
+        statStatus.textContent = label;
+        statStatus.className = 'status-value status-' + state;
       }
 
-      function setStatus(text, isError) {
-        statusEl.textContent = text;
-        statusEl.style.color = isError ? 'var(--error)' : 'var(--accent)';
-      }
-
-      let busy = false;
-
-      async function send(promptText) {
-        if (busy || !promptText.trim()) return;
-        busy = true;
-        input.disabled = true;
-        setStatus('generating…');
-        addLine('prompt-line', '➜ ' + promptText);
-
-        const respDiv = document.createElement('div');
-        respDiv.className = 'line resp-line';
-        const cursor = document.createElement('span');
-        cursor.className = 'cursor';
-        respDiv.appendChild(document.createTextNode(''));
-        respDiv.appendChild(cursor);
-        log.appendChild(respDiv);
-        scrollBottom();
-
-        const start = performance.now();
-        let fullText = '';
-
+      async function loadModels() {
         try {
-          const res = await fetch(OLLAMA_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: MODEL, prompt: promptText, stream: true })
+          const res = await fetch(OLLAMA_BASE + '/api/tags');
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const data = await res.json();
+          const models = (data.models || []).sort((a, b) => a.size - b.size);
+
+          if (models.length === 0) {
+            connHint.textContent = 'no models found on this server.';
+            setStatus('error', 'no models');
+            return;
+          }
+
+          modelSelect.innerHTML = '';
+          models.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.name;
+            const gb = (m.size / 1e9).toFixed(1);
+            opt.textContent = m.name + '  (' + gb + ' GB)';
+            modelSelect.appendChild(opt);
           });
 
-          if (!res.ok || !res.body) throw new Error('HTTP ' + res.status);
-
-          const reader = res.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = '';
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop();
-
-            for (const line of lines) {
-              if (!line.trim()) continue;
-              const obj = JSON.parse(line);
-              if (obj.response) {
-                fullText += obj.response;
-                respDiv.textContent = fullText;
-                respDiv.appendChild(cursor);
-                scrollBottom();
-              }
-              if (obj.done) {
-                const secs = obj.eval_duration ? obj.eval_duration / 1e9 : null;
-                const tps = secs && obj.eval_count ? (obj.eval_count / secs).toFixed(1) : '—';
-                tpsEl.textContent = tps;
-                latEl.textContent = ((performance.now() - start) / 1000).toFixed(1) + 's';
-              }
-            }
-          }
-          cursor.remove();
-          setStatus('idle');
+          modelSelect.disabled = false;
+          promptInput.disabled = false;
+          sendBtn.disabled = false;
+          connHint.textContent = 'connected to ' + OLLAMA_BASE.replace('https://', '').replace('http://', '') + '. type a prompt and hit enter.';
+          setStatus('idle', 'ready');
+          promptInput.focus();
         } catch (err) {
-          cursor.remove();
-          const msg = err.message.includes('Failed to fetch')
-            ? 'blocked — likely CORS. Ollama needs OLLAMA_ORIGINS set to allow this origin.'
-            : err.message;
-          addLine('err-line', 'error: ' + msg);
-          setStatus('error', true);
-        } finally {
-          busy = false;
-          input.disabled = false;
-          input.focus();
+          connHint.textContent = 'error: could not reach ollama at ' + OLLAMA_BASE + ' (' + err.message + ')';
+          setStatus('error', 'disconnected');
         }
       }
 
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          const val = input.value;
-          input.value = '';
-          send(val);
+      function addTurn(promptText) {
+        const turn = document.createElement('div');
+        turn.className = 'turn';
+        turn.innerHTML =
+          '<div class="prompt-line"></div>' +
+          '<div class="response-line"></div>';
+        turn.querySelector('.prompt-line').textContent = promptText;
+        log.appendChild(turn);
+        log.scrollTop = log.scrollHeight;
+        return turn;
+      }
+
+      async function sendPrompt() {
+        const text = promptInput.value.trim();
+        if (!text) return;
+        const model = modelSelect.value;
+        if (!model) return;
+
+        promptInput.value = '';
+        promptInput.disabled = true;
+        sendBtn.disabled = true;
+        modelSelect.disabled = true;
+        statToks.textContent = '\u2014';
+        statLatency.textContent = '\u2014';
+        setStatus('loading', 'loading ' + model + '...');
+
+        const turn = addTurn(text);
+        const responseEl = turn.querySelector('.response-line');
+        responseEl.textContent = '';
+
+        const startTime = performance.now();
+
+        try {
+          const res = await fetch(OLLAMA_BASE + '/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: model, prompt: text, stream: false })
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const data = await res.json();
+
+          const elapsedS = (performance.now() - startTime) / 1000;
+          const evalCount = data.eval_count || 0;
+          const evalDurationS = (data.eval_duration || 0) / 1e9;
+          const toksPerSec = evalDurationS > 0 ? (evalCount / evalDurationS).toFixed(1) : '\u2014';
+          const loadS = ((data.load_duration || 0) / 1e9).toFixed(1);
+
+          responseEl.textContent = data.response || '(empty response)';
+
+          const meta = document.createElement('div');
+          meta.className = 'meta-line';
+          meta.textContent = 'model=' + model + '  load=' + loadS + 's  total=' + elapsedS.toFixed(1) + 's';
+          turn.appendChild(meta);
+
+          statToks.textContent = toksPerSec;
+          statLatency.textContent = elapsedS.toFixed(1) + 's';
+          setStatus('ready', 'ready');
+        } catch (err) {
+          responseEl.className = 'error-line';
+          responseEl.textContent = 'error: ' + err.message;
+          setStatus('error', 'error');
+        } finally {
+          promptInput.disabled = false;
+          sendBtn.disabled = false;
+          modelSelect.disabled = false;
+          promptInput.focus();
+          log.scrollTop = log.scrollHeight;
         }
-        if (e.ctrlKey && e.key === 'l') {
-          e.preventDefault();
-          log.innerHTML = '';
-          addLine('sys-line', 'cleared.');
-        }
+      }
+
+      sendBtn.addEventListener('click', sendPrompt);
+      promptInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') sendPrompt();
       });
 
-      input.focus();
-    })();
+      loadModels();
     </script>
+
     </body>
     </html>
 
@@ -325,19 +292,17 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ai-ui
-  namespace: ai-ui
-  labels:
-    app: ai-ui
+  name: ollama-ui
+  namespace: ollama-ui
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ai-ui
+      app: ollama-ui
   template:
     metadata:
       labels:
-        app: ai-ui
+        app: ollama-ui
     spec:
       containers:
         - name: nginx
@@ -357,37 +322,35 @@ spec:
       volumes:
         - name: html
           configMap:
-            name: ai-ui-html
+            name: ollama-ui-html
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: ai-ui
-  namespace: ai-ui
+  name: ollama-ui
+  namespace: ollama-ui
 spec:
   selector:
-    app: ai-ui
+    app: ollama-ui
   ports:
     - port: 80
       targetPort: 80
-      name: http
-  type: ClusterIP
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: ai-ui
-  namespace: ai-ui
+  name: ollama-ui
+  namespace: ollama-ui
 spec:
   ingressClassName: cloudflare-tunnel
   rules:
-    - host: ai.naidu72.info
+    - host: chat.naidu72.info
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: ai-ui
+                name: ollama-ui
                 port:
                   number: 80

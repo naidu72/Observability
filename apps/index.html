@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ollama @ pi-k8s</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #12161c;
+    --border: #2a2f38;
+    --text: #c9d1d9;
+    --muted: #6e7681;
+    --green: #3fb950;
+    --amber: #d29922;
+    --red: #f85149;
+    --accent: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 14px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .titlebar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .dot.r { background: var(--red); }
+  .dot.a { background: var(--amber); }
+  .dot.g { background: var(--green); }
+  .titletext { margin-left: 8px; color: var(--muted); }
+  .titletext b { color: var(--text); }
+
+  .statusbar {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .statusbar label { color: var(--muted); margin-right: 8px; }
+  select {
+    background: var(--bg);
+    color: var(--green);
+    border: 1px solid var(--border);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  select:disabled { color: var(--muted); }
+  .stat { color: var(--muted); }
+  .stat b { color: var(--text); }
+  .status-value { font-weight: bold; }
+  .status-idle { color: var(--muted); }
+  .status-loading { color: var(--amber); }
+  .status-ready { color: var(--green); }
+  .status-error { color: var(--red); }
+
+  .log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+  }
+  .hint { color: var(--muted); font-style: italic; margin-bottom: 16px; }
+  .turn { margin-bottom: 18px; }
+  .prompt-line { color: var(--amber); margin-bottom: 4px; }
+  .prompt-line::before { content: "→ "; }
+  .response-line { color: var(--text); white-space: pre-wrap; padding-left: 4px; border-left: 2px solid var(--border); margin-left: 2px; padding-left: 10px; }
+  .error-line { color: var(--red); padding-left: 10px; border-left: 2px solid var(--red); margin-left: 2px; }
+  .meta-line { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+  .inputbar {
+    display: flex;
+    gap: 10px;
+    padding: 14px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+  }
+  input[type=text] {
+    flex: 1;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font-family: inherit;
+    font-size: 14px;
+    padding: 10px 12px;
+    border-radius: 4px;
+  }
+  input[type=text]:focus { outline: none; border-color: var(--accent); }
+  button {
+    background: var(--bg);
+    color: var(--green);
+    border: 1px solid var(--border);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 0 18px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--green); }
+  button:disabled { color: var(--muted); cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <span class="dot r"></span><span class="dot a"></span><span class="dot g"></span>
+  <span class="titletext">ollama@<b id="node-label">pi5-0</b> &mdash; pi-k8s homelab</span>
+</div>
+
+<div class="statusbar">
+  <div>
+    <label for="model-select">model</label>
+    <select id="model-select" disabled>
+      <option>loading...</option>
+    </select>
+  </div>
+  <div class="stat">tok/s <b id="stat-toks">&mdash;</b></div>
+  <div class="stat">latency <b id="stat-latency">&mdash;</b></div>
+  <div class="stat">status <span class="status-value status-idle" id="stat-status">idle</span></div>
+</div>
+
+<div class="log" id="log">
+  <div class="hint" id="conn-hint">connecting to ollama...</div>
+</div>
+
+<div class="inputbar">
+  <input type="text" id="prompt-input" placeholder="type a prompt and hit enter" disabled>
+  <button id="send-btn" disabled>send</button>
+</div>
+
+<script>
+  const OLLAMA_BASE = window.location.hostname === 'localhost'
+    ? 'http://localhost:11434'
+    : 'https://ollama.naidu72.info';
+
+  const modelSelect = document.getElementById('model-select');
+  const promptInput = document.getElementById('prompt-input');
+  const sendBtn = document.getElementById('send-btn');
+  const log = document.getElementById('log');
+  const connHint = document.getElementById('conn-hint');
+  const statStatus = document.getElementById('stat-status');
+  const statToks = document.getElementById('stat-toks');
+  const statLatency = document.getElementById('stat-latency');
+
+  function setStatus(state, label) {
+    statStatus.textContent = label;
+    statStatus.className = 'status-value status-' + state;
+  }
+
+  async function loadModels() {
+    try {
+      const res = await fetch(OLLAMA_BASE + '/api/tags');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const models = (data.models || []).sort((a, b) => a.size - b.size);
+
+      if (models.length === 0) {
+        connHint.textContent = 'no models found on this server.';
+        setStatus('error', 'no models');
+        return;
+      }
+
+      modelSelect.innerHTML = '';
+      models.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.name;
+        const gb = (m.size / 1e9).toFixed(1);
+        opt.textContent = m.name + '  (' + gb + ' GB)';
+        modelSelect.appendChild(opt);
+      });
+
+      modelSelect.disabled = false;
+      promptInput.disabled = false;
+      sendBtn.disabled = false;
+      connHint.textContent = 'connected to ' + OLLAMA_BASE.replace('https://', '').replace('http://', '') + '. type a prompt and hit enter.';
+      setStatus('idle', 'ready');
+      promptInput.focus();
+    } catch (err) {
+      connHint.textContent = 'error: could not reach ollama at ' + OLLAMA_BASE + ' (' + err.message + ')';
+      setStatus('error', 'disconnected');
+    }
+  }
+
+  function addTurn(promptText) {
+    const turn = document.createElement('div');
+    turn.className = 'turn';
+    turn.innerHTML =
+      '<div class="prompt-line"></div>' +
+      '<div class="response-line"></div>';
+    turn.querySelector('.prompt-line').textContent = promptText;
+    log.appendChild(turn);
+    log.scrollTop = log.scrollHeight;
+    return turn;
+  }
+
+  async function sendPrompt() {
+    const text = promptInput.value.trim();
+    if (!text) return;
+    const model = modelSelect.value;
+    if (!model) return;
+
+    promptInput.value = '';
+    promptInput.disabled = true;
+    sendBtn.disabled = true;
+    modelSelect.disabled = true;
+    statToks.textContent = '\u2014';
+    statLatency.textContent = '\u2014';
+    setStatus('loading', 'loading ' + model + '...');
+
+    const turn = addTurn(text);
+    const responseEl = turn.querySelector('.response-line');
+    responseEl.textContent = '';
+
+    const startTime = performance.now();
+
+    try {
+      const res = await fetch(OLLAMA_BASE + '/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: model, prompt: text, stream: false })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+
+      const elapsedS = (performance.now() - startTime) / 1000;
+      const evalCount = data.eval_count || 0;
+      const evalDurationS = (data.eval_duration || 0) / 1e9;
+      const toksPerSec = evalDurationS > 0 ? (evalCount / evalDurationS).toFixed(1) : '\u2014';
+      const loadS = ((data.load_duration || 0) / 1e9).toFixed(1);
+
+      responseEl.textContent = data.response || '(empty response)';
+
+      const meta = document.createElement('div');
+      meta.className = 'meta-line';
+      meta.textContent = 'model=' + model + '  load=' + loadS + 's  total=' + elapsedS.toFixed(1) + 's';
+      turn.appendChild(meta);
+
+      statToks.textContent = toksPerSec;
+      statLatency.textContent = elapsedS.toFixed(1) + 's';
+      setStatus('ready', 'ready');
+    } catch (err) {
+      responseEl.className = 'error-line';
+      responseEl.textContent = 'error: ' + err.message;
+      setStatus('error', 'error');
+    } finally {
+      promptInput.disabled = false;
+      sendBtn.disabled = false;
+      modelSelect.disabled = false;
+      promptInput.focus();
+      log.scrollTop = log.scrollHeight;
+    }
+  }
+
+  sendBtn.addEventListener('click', sendPrompt);
+  promptInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendPrompt();
+  });
+
+  loadModels();
+</script>
+
+</body>
+</html>
