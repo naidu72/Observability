@@ -150,9 +150,10 @@ data:
     </div>
 
     <script>
-      const OLLAMA_BASE = window.location.hostname === 'localhost'
-        ? 'http://localhost:11434'
-        : 'https://ollama.naidu72.info';
+      // Relative path - nginx (serving this page) proxies /api/* to Ollama's
+      // ClusterIP service internally. The browser never talks to Ollama directly,
+      // so no public Ollama endpoint or CORS config is needed.
+      const OLLAMA_BASE = '/api';
 
       const modelSelect = document.getElementById('model-select');
       const promptInput = document.getElementById('prompt-input');
@@ -170,7 +171,7 @@ data:
 
       async function loadModels() {
         try {
-          const res = await fetch(OLLAMA_BASE + '/api/tags');
+          const res = await fetch(OLLAMA_BASE + '/tags');
           if (!res.ok) throw new Error('HTTP ' + res.status);
           const data = await res.json();
           const models = (data.models || []).sort((a, b) => a.size - b.size);
@@ -193,7 +194,7 @@ data:
           modelSelect.disabled = false;
           promptInput.disabled = false;
           sendBtn.disabled = false;
-          connHint.textContent = 'connected to ' + OLLAMA_BASE.replace('https://', '').replace('http://', '') + '. type a prompt and hit enter.';
+          connHint.textContent = 'connected to ollama (via internal cluster proxy). type a prompt and hit enter.';
           setStatus('idle', 'ready');
           promptInput.focus();
         } catch (err) {
@@ -235,7 +236,7 @@ data:
         const startTime = performance.now();
 
         try {
-          const res = await fetch(OLLAMA_BASE + '/api/generate', {
+          const res = await fetch(OLLAMA_BASE + '/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ model: model, prompt: text, stream: false })
@@ -284,6 +285,31 @@ data:
     </html>
 
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-ui-nginx-conf
+  namespace: ai-ui
+data:
+  default.conf: |
+    server {
+      listen 80;
+
+      location / {
+        root /usr/share/nginx/html;
+        index index.html;
+      }
+
+      # Proxies UI calls to Ollama's ClusterIP service over the pod
+      # network. Browser never talks to Ollama directly - no public
+      # Ollama endpoint or CORS config needed.
+      location /api/ {
+        proxy_pass http://ollama.ollama.svc.cluster.local:11434/api/;
+        proxy_set_header Host $host;
+        proxy_read_timeout 300s;
+      }
+    }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -307,6 +333,9 @@ spec:
           volumeMounts:
             - name: html
               mountPath: /usr/share/nginx/html
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
           resources:
             requests:
               cpu: "50m"
@@ -318,6 +347,9 @@ spec:
         - name: html
           configMap:
             name: ai-ui-html
+        - name: nginx-conf
+          configMap:
+            name: ai-ui-nginx-conf
 ---
 apiVersion: v1
 kind: Service

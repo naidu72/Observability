@@ -143,9 +143,10 @@
 </div>
 
 <script>
-  const OLLAMA_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:11434'
-    : 'https://ollama.naidu72.info';
+  // Relative path - nginx (serving this page) proxies /api/* to Ollama's
+  // ClusterIP service internally. The browser never talks to Ollama directly,
+  // so no public Ollama endpoint or CORS config is needed.
+  const OLLAMA_BASE = '/api';
 
   const modelSelect = document.getElementById('model-select');
   const promptInput = document.getElementById('prompt-input');
@@ -163,7 +164,7 @@
 
   async function loadModels() {
     try {
-      const res = await fetch(OLLAMA_BASE + '/api/tags');
+      const res = await fetch(OLLAMA_BASE + '/tags');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       const models = (data.models || []).sort((a, b) => a.size - b.size);
@@ -186,7 +187,7 @@
       modelSelect.disabled = false;
       promptInput.disabled = false;
       sendBtn.disabled = false;
-      connHint.textContent = 'connected to ' + OLLAMA_BASE.replace('https://', '').replace('http://', '') + '. type a prompt and hit enter.';
+      connHint.textContent = 'connected to ollama (via internal cluster proxy). type a prompt and hit enter.';
       setStatus('idle', 'ready');
       promptInput.focus();
     } catch (err) {
@@ -228,7 +229,7 @@
     const startTime = performance.now();
 
     try {
-      const res = await fetch(OLLAMA_BASE + '/api/generate', {
+      const res = await fetch(OLLAMA_BASE + '/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: model, prompt: text, stream: false })
