@@ -300,11 +300,12 @@ data:
         index index.html;
       }
 
-      # Proxies UI calls to Ollama's ClusterIP service over the pod
-      # network. Browser never talks to Ollama directly - no public
-      # Ollama endpoint or CORS config needed.
+      # TEMPORARY TEST (revert to ollama.ollama.svc.cluster.local when done):
+      # proxying to ollama-sdcard-test, a throwaway pod on pi5-0 with its
+      # models on local sdcard storage instead of the production NFS PVC,
+      # to compare load-time reliability. See ollama-deployment.yaml.
       location /api/ {
-        proxy_pass http://ollama.ollama.svc.cluster.local:11434/api/;
+        proxy_pass http://ollama-sdcard-test.ollama.svc.cluster.local:11434/api/;
         proxy_set_header Host $host;
         proxy_read_timeout 300s;
       }
