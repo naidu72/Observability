@@ -46,6 +46,8 @@ spec:
               value: "*"
             - name: OLLAMA_KEEP_ALIVE
               value: "24h"
+            - name: OLLAMA_MAX_LOADED_MODELS
+              value: "1"
           lifecycle:
             postStart:
               exec:
@@ -65,7 +67,7 @@ spec:
               memory: "1Gi"
             limits:
               cpu: "3"
-              memory: "2500Mi"
+              memory: "6Gi"
           readinessProbe:
             httpGet:
               path: /
