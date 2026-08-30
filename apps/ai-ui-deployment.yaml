@@ -234,23 +234,54 @@ data:
         responseEl.textContent = '';
 
         const startTime = performance.now();
+        let fullResponse = '';
 
         try {
+          // stream:true - render tokens as they arrive instead of waiting
+          // for the whole response. Besides feeling faster, this avoids
+          // long answers getting cut off by the Cloudflare tunnel's
+          // request-duration limit, which a single non-streamed request
+          // can exceed on slower models/longer answers.
           const res = await fetch(OLLAMA_BASE + '/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: model, prompt: text, stream: false })
+            body: JSON.stringify({ model: model, prompt: text, stream: true })
           });
           if (!res.ok) throw new Error('HTTP ' + res.status);
-          const data = await res.json();
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let finalData = null;
+          setStatus('loading', 'generating...');
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              const chunk = JSON.parse(line);
+              if (chunk.response) {
+                fullResponse += chunk.response;
+                responseEl.textContent = fullResponse;
+                log.scrollTop = log.scrollHeight;
+              }
+              if (chunk.done) finalData = chunk;
+            }
+          }
 
           const elapsedS = (performance.now() - startTime) / 1000;
-          const evalCount = data.eval_count || 0;
-          const evalDurationS = (data.eval_duration || 0) / 1e9;
+          const evalCount = (finalData && finalData.eval_count) || 0;
+          const evalDurationS = ((finalData && finalData.eval_duration) || 0) / 1e9;
           const toksPerSec = evalDurationS > 0 ? (evalCount / evalDurationS).toFixed(1) : '\u2014';
-          const loadS = ((data.load_duration || 0) / 1e9).toFixed(1);
+          const loadS = (((finalData && finalData.load_duration) || 0) / 1e9).toFixed(1);
 
-          responseEl.textContent = data.response || '(empty response)';
+          if (!fullResponse) responseEl.textContent = '(empty response)';
 
           const meta = document.createElement('div');
           meta.className = 'meta-line';
@@ -262,7 +293,7 @@ data:
           setStatus('ready', 'ready');
         } catch (err) {
           responseEl.className = 'error-line';
-          responseEl.textContent = 'error: ' + err.message;
+          responseEl.textContent = (fullResponse ? fullResponse + '\n\n' : '') + 'error: ' + err.message;
           setStatus('error', 'error');
         } finally {
           promptInput.disabled = false;
