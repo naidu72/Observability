@@ -1,0 +1,60 @@
+# Phase 1 - Lesson 1: one Kafka node acting as both controller (metadata/KRaft) and broker (data)
+# Namespace kafka-lab: create it first, or let the ArgoCD app create it (CreateNamespace=true)
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: dual-role
+  namespace: kafka-lab
+  labels:
+    strimzi.io/cluster: lab
+spec:
+  replicas: 1
+  roles:
+    - controller
+    - broker
+  storage:
+    type: ephemeral          # lab only: data is lost if the pod restarts. We avoid NFS on purpose (Kafka + NFS = file-locking pain)
+    sizeLimit: 2Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      memory: 1536Mi
+  jvmOptions:
+    "-Xms": 512m
+    "-Xmx": 512m
+  template:
+    pod:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: ["pi5-0"]   # keep it off pi5-1 (control plane) and rock64 (too small)
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: lab
+  namespace: kafka-lab
+spec:
+  kafka:
+    version: 4.2.0
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+    config:
+      # Single broker => every replication factor must be 1
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      default.replication.factor: 1
+      min.insync.replicas: 1
+  entityOperator:
+    topicOperator: {}   # lets us manage topics as KafkaTopic YAML (GitOps-friendly)
+    userOperator: {}

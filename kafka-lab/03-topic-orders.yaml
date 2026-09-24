@@ -1,0 +1,13 @@
+# Phase 1 - Lesson 2: our first topic
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: orders
+  namespace: kafka-lab
+  labels:
+    strimzi.io/cluster: lab
+spec:
+  partitions: 3          # 3 "lanes" -> up to 3 consumers in one group can work in parallel
+  replicas: 1            # single broker lab
+  config:
+    retention.ms: 86400000   # keep events 24h even AFTER they are read (Kafka is a log, not a queue)
