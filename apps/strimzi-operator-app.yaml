@@ -1,0 +1,26 @@
+# Phase 1 - Lesson 1: Strimzi operator (manages Kafka on Kubernetes)
+# Strimzi 1.0.1 -> supports only the kafka.strimzi.io/v1 API, Kafka 4.x (KRaft only, no ZooKeeper)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: strimzi-operator
+  namespace: argocd
+spec:
+  project: kafka-lab
+  source:
+    repoURL: https://strimzi.io/charts/
+    chart: strimzi-kafka-operator
+    targetRevision: 1.0.1
+    helm:
+      valuesObject:
+        watchAnyNamespace: true      # homelab: let later phases use their own namespaces
+  destination:
+    server: https://k8spi.naidu72.info   # ArgoCD runs on the WSL2 hub; deploy to the Pi cluster
+    namespace: strimzi
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true         # Strimzi CRDs are large (same 262KB annotation issue you hit with kube-prometheus-stack)
