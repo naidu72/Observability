@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kafka-lab
+  namespace: argocd
+spec:
+  project: kafka-lab
+  source:
+    repoURL: https://github.com/naidu72/Observability.git
+    targetRevision: main
+    path: kafka-lab
+  destination:
+    server: https://k8spi.naidu72.info
+    namespace: kafka-lab
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
