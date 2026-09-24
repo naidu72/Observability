@@ -1,0 +1,30 @@
+# apps/kafka-lab-project.yaml (on main). Created by root-app before the Applications that use it.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: kafka-lab
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  description: Kafka learning lab - Strimzi operator + Kafka cluster
+  sourceRepos:
+    - https://strimzi.io/charts/                        # Strimzi Helm chart
+    - https://github.com/naidu72/Observability.git     # kafka-lab/ manifests
+  destinations:
+    - server: https://k8spi.naidu72.info
+      namespace: strimzi
+    - server: https://k8spi.naidu72.info
+      namespace: kafka-lab
+  clusterResourceWhitelist:                             # operators need cluster-scoped objects
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
