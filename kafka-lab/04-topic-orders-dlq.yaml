@@ -1,0 +1,13 @@
+# Dead-letter topic: messages the indexer could not process, with the reason in a header
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: orders-dlq
+  namespace: kafka-lab
+  labels:
+    strimzi.io/cluster: lab
+spec:
+  partitions: 1          # low volume; one partition keeps dead letters in arrival order
+  replicas: 1
+  config:
+    retention.ms: 604800000   # keep 7 days: long enough for someone to investigate and replay
